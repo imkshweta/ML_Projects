@@ -1,0 +1,137 @@
+import pandas as pd
+import numpy as np
+import pickle
+
+import nltk
+import matplotlib.pyplot as plt
+import seaborn as sns
+%matplotlib inline
+
+from sklearn.metrics import accuracy_score,fbeta_score,classification_report
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+
+from wordcloud import WordCloud
+nltk.download('stopwords')
+stop=stopwords.words("english")
+
+from nltk.stem.porter import PorterStemmer
+from nltk.stem import SnowballStemmer
+ss=SnowballStemmer("english")
+ps=PorterStemmer()
+
+msg_df=pd.read_csv("E:\SMS.csv",engine="python",names=["class","message"])
+msg_df.shape
+msg_df.head(5)
+
+msg_df.describe()
+msg_df.isna()
+msg_df["class"].value_counts()
+
+msg_df["class"].value_counts().plot(kind="pie",explode=[0,0.1],figsize=(6,6),autopct="%1.2f%%")
+plt.ylabel("Spam VS Ham")
+plt.legend(["Ham","Spam"])
+plt.show()
+
+msg_df['length']=msg_df['message'].apply(len)
+msg_df.head()
+
+msg_df.hist(column="length",by="class",bins=50,figsize=(11,6),ec="red")
+import string
+import re
+
+def cleantext(message):
+    message=re.sub('[^ a-zA-Z]','',message)
+    message=message.lower()
+    message=message.split()
+    words=[ss.stem(word) for word in message if word not in stop]
+    return " ".join(words)
+
+msg_df["message"]=msg_df["message"].apply(cleantext)
+msg_df.head(n=10)
+
+spam_messages=msg_df[msg_df["class"]=="spam"]["message"]
+ham_messages=msg_df[msg_df["class"]=="ham"]["message"]
+ham_messages
+spam_messages
+
+nltk.download('punkt')
+spam_words=[]
+ham_words=[]
+
+def extractSpamWords(spamMessages):
+    global spam_words
+    words=[word for word in word_tokenize(spamMessages)]
+    spam_words=spam_words+words
+    
+def extractHamWords(hamMessages):
+    global ham_words
+    words=[word for word in word_tokenize(hamMessages)]
+    ham_words=ham_words+words
+    
+spam_messages.apply(extractSpamWords)
+ham_messages.apply(extractHamWords)
+
+spam_wordcloud=WordCloud(width=600,height=400).generate(" ".join(spam_words))
+plt.figure(figsize=(10,8), facecolor="k")
+plt.imshow(spam_wordcloud)
+plt.axis("off")
+plt.tight_layout(pad=0)
+plt.show()
+
+def encodeCategory(cat):
+    if cat=="spam":
+        return 1
+    else:
+        return 0
+
+msg_df["class"]=msg_df["class"].apply(encodeCategory)
+
+from sklearn.feature_extraction.text import CountVectorizer
+cv=CountVectorizer()
+x=cv.fit(msg_df["message"])
+x.vocabulary_
+
+x=cv.fit_transform(msg_df["message"])
+print(x.shape)
+x=cv.fit_transform(msg_df["message"]).toarray()
+x
+
+df=pd.DataFrame(x,columns=cv.get_feature_names_out())
+df
+df['len']=msg_df['length']
+df
+
+y=msg_df['class']
+y
+
+from sklearn.model_selection import train_test_split
+X_train,X_test, y_train, y_test=train_test_split(df,y,test_size=0.20,random_state=0)
+
+from sklearn.naive_bayes import MultinomialNB
+spam_detector=MultinomialNB().fit(X_train,y_train)
+y_pred=spam_detector.predict(X_test)
+actual=np.array(y_test)
+print("length of actual is :",len(actual))
+
+
+count=0
+for i in range(len(y_pred)):
+    if y_pred[i]==actual[i]:
+        count=count+1
+print(" total correct prediction is:", count)
+print(classification_report(y_test,y_pred))
+print("Accuracy using Niave-bayes is:",(accuracy_score(y_test,y_pred)))
+
+from sklearn import tree
+from sklearn.tree import DecisionTreeClassifier
+from sklearn import metrics
+model=DecisionTreeClassifier()
+model.fit(X_train,y_train)
+dt_predict=model.predict(X_test)
+print("Accuracy of decision tree is:",metrics.accuracy_score(dt_predict,y_test))
+
+from sklearn.neighbors import KNeighborsClassifier
+classifier=KNeighborsClassifier(n_neighbors=5).fit(X_train,y_train)
+pred=(classifier.predict(X_test))
+print("Accuracy of KNN is:",accuracy_score(y_test,pred))
